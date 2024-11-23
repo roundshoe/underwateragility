@@ -79,8 +79,7 @@ import net.runelite.client.util.GameEventManager;
 @PluginDescriptor(
 	name = "Underwater Agility",
 	description = "A plugin for Underwater Agility.",
-	tags = {"under", "water", "underwater", "agility", "fossil", "island"},
-	enabledByDefault = false
+	tags = {"under", "water", "underwater", "agility", "fossil", "island"}
 )
 public class UWAPlugin extends Plugin implements KeyListener
 {
