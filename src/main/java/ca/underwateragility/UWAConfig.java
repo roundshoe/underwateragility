@@ -220,12 +220,24 @@ public interface UWAConfig extends Config
 		return false;
 	}
 
+	@ConfigItem(
+		name = "Replace Swim Animation",
+		description = "Replaces the swim animation with walking.",
+		position = 13,
+		keyName = "replaceSwimAniamtion",
+		section = SECTION_GENERAL
+	)
+	default boolean replaceSwimAniamtion()
+	{
+		return false;
+	}
+
 	String CONFIG_KEY_HIDE_OXYGEN_WIDGET = "hideOxygenWidget";
 
 	@ConfigItem(
 		name = "Hide Oxygen Widget",
 		description = "Hide the oxygen widget.",
-		position = 13,
+		position = 14,
 		keyName = CONFIG_KEY_HIDE_OXYGEN_WIDGET,
 		section = SECTION_GENERAL
 	)
@@ -239,7 +251,7 @@ public interface UWAConfig extends Config
 	@ConfigItem(
 		name = "Hide Water Widget",
 		description = "Hide the water widget.",
-		position = 14,
+		position = 15,
 		keyName = CONFIG_KEY_HIDE_WATER_WIDGET,
 		section = SECTION_GENERAL
 	)
@@ -253,7 +265,7 @@ public interface UWAConfig extends Config
 	@ConfigItem(
 		name = "Hide Scenery",
 		description = "Hide scenery.",
-		position = 15,
+		position = 16,
 		keyName = CONFIG_KEY_HIDE_SCENERY,
 		section = SECTION_GENERAL
 	)

@@ -343,6 +343,7 @@ public class UWAPlugin extends Plugin implements KeyListener
 		updateTargetWorldPoint();
 		updateDistanceToTarget();
 		updateChestClamLines();
+		updatePlayerAnimations();
 	}
 
 	@Subscribe
@@ -641,6 +642,28 @@ public class UWAPlugin extends Plugin implements KeyListener
 
 		chestClamLines.add(client.getLocalPlayer().getWorldLocation());
 		chestClamLines.add(new WorldPoint(targetWorldPoint.getX(), targetWorldPoint.getY(), 1));
+	}
+
+	private void updatePlayerAnimations()
+	{
+		if (!config.replaceSwimAniamtion())
+		{
+			return;
+		}
+
+		final var player = client.getLocalPlayer();
+
+		if (player.getIdlePoseAnimation() != 808)
+		{
+			player.setIdlePoseAnimation(808);
+			player.setIdleRotateLeft(823);
+			player.setIdleRotateRight(823);
+			player.setWalkAnimation(819);
+			player.setWalkRotateLeft(821);
+			player.setWalkRotateRight(822);
+			player.setWalkRotate180(820);
+			player.setRunAnimation(824);
+		}
 	}
 
 	private boolean shouldDraw(final Renderable renderable, final boolean drawingUI)
