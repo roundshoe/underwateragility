@@ -26,19 +26,26 @@
 
 package ca.underwateragility;
 
+import ca.underwateragility.UWAConfig.OutlineStyle;
+import ca.underwateragility.UWAConfig.OverlayStyle;
+import ca.underwateragility.UWAConfig.OxygenBar;
+import ca.underwateragility.tools.WorldLines;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics2D;
-import java.awt.Polygon;
 import java.awt.RenderingHints;
 import java.awt.Shape;
 import java.awt.Stroke;
+import java.util.List;
+import java.util.Objects;
+import java.util.function.Function;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.api.Client;
-import net.runelite.api.NPC;
 import net.runelite.api.Point;
+import net.runelite.api.TileObject;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
@@ -47,8 +54,16 @@ import net.runelite.client.ui.overlay.outline.ModelOutlineRenderer;
 import net.runelite.client.util.ColorUtil;
 
 @Singleton
-class UWAOverlay extends Overlay
+class UWASceneOverlay extends Overlay
 {
+	private static final List<List<WorldPoint>> HOLE_WORLD_POINTS = List.of(
+		List.of(new WorldPoint(3772, 10267, 1), new WorldPoint(3823, 10247, 1)),
+		List.of(new WorldPoint(3772, 10280, 1), new WorldPoint(3816, 10271, 1)),
+		List.of(new WorldPoint(3789, 10298, 1), new WorldPoint(3833, 10289, 1)),
+		List.of(new WorldPoint(3754, 10241, 1), new WorldPoint(3779, 10241, 1)),
+		List.of(new WorldPoint(3779, 10277, 1), new WorldPoint(3716, 10243, 1))
+	);
+
 	private static final Stroke STROKE = new BasicStroke(1);
 
 	private final Client client;
@@ -57,56 +72,81 @@ class UWAOverlay extends Overlay
 	private final ModelOutlineRenderer modelOutlineRenderer;
 
 	@Inject
-	UWAOverlay(
+	UWASceneOverlay(
 		final Client client,
 		final UWAPlugin plugin,
 		final UWAConfig config,
 		final ModelOutlineRenderer modelOutlineRenderer)
 	{
+		super(plugin);
 		this.client = client;
 		this.plugin = plugin;
 		this.config = config;
 		this.modelOutlineRenderer = modelOutlineRenderer;
 
 		setPosition(OverlayPosition.DYNAMIC);
-		setLayer(OverlayLayer.UNDER_WIDGETS);
+		setLayer(OverlayLayer.ABOVE_SCENE);
 		setPriority(Overlay.PRIORITY_HIGH);
 	}
 
 	@Override
 	public Dimension render(final Graphics2D graphics2D)
 	{
-		if (config.obstaclesOverlay())
-		{
-			renderObstacles(graphics2D);
-		}
-
 		if (config.currentOverlay())
 		{
 			renderCurrents(graphics2D);
 		}
 
-		if (config.bubbleOverlay())
+		if (!config.linesPressKey() || plugin.isKeyPressed())
+		{
+			if (config.holeLines())
+			{
+				for (final var points : HOLE_WORLD_POINTS)
+				{
+					WorldLines.drawLinesOnWorld(graphics2D, client, points, Color.CYAN);
+				}
+			}
+
+			if (config.chestClamLine())
+			{
+				WorldLines.drawLinesOnWorld(graphics2D, client, plugin.getChestClamLines(), Color.MAGENTA);
+			}
+		}
+
+		if (config.obstaclesOverlay() != OutlineStyle.OFF)
+		{
+			renderObstacles(graphics2D);
+		}
+
+		var style = config.bubbleOverlay();
+
+		if (style == OverlayStyle.SCENE || style == OverlayStyle.BOTH)
 		{
 			renderBubbles(graphics2D);
 		}
 
-		if (config.holeOverlay())
+		style = config.holeOverlay();
+
+		if (style == OverlayStyle.SCENE || style == OverlayStyle.BOTH)
 		{
 			renderHoles(graphics2D);
 		}
 
-		if (config.pufferFishOverlay())
+		style = config.pufferFishOverlay();
+
+		if (style == OverlayStyle.SCENE || style == OverlayStyle.BOTH)
 		{
 			renderPufferFish(graphics2D);
 		}
 
-		if (config.chestClamOverlay())
+		style = config.chestClamOverlay();
+
+		if (style == OverlayStyle.SCENE || style == OverlayStyle.BOTH)
 		{
 			renderChestsClams(graphics2D);
 		}
 
-		if (config.oxygenBar() != UWAConfig.OxygenBar.OFF)
+		if (config.oxygenBar() != OxygenBar.OFF)
 		{
 			renderOxygenBar(graphics2D);
 		}
@@ -114,127 +154,83 @@ class UWAOverlay extends Overlay
 		return null;
 	}
 
-	private void renderHoles(final Graphics2D graphics2D)
+	private void renderCurrents(final Graphics2D graphics2D)
 	{
-		final var gameObjects = plugin.getHoles();
+		plugin.getCurrents().stream()
+			.map(TileObject::getCanvasTilePoly)
+			.filter(Objects::nonNull)
+			.forEach(s -> {
+				graphics2D.setStroke(STROKE);
+				graphics2D.setColor(config.currentOutlineColor());
+				graphics2D.draw(s);
 
-		if (gameObjects.isEmpty())
-		{
-			return;
-		}
-
-		for (final var gameObject : gameObjects)
-		{
-			final Shape shape = gameObject.getClickbox();
-
-			if (shape == null)
-			{
-				continue;
-			}
-
-			graphics2D.setStroke(STROKE);
-			graphics2D.setColor(config.holeOutlineColor());
-			graphics2D.draw(shape);
-			graphics2D.setColor(config.holeFillColor());
-			graphics2D.fill(shape);
-		}
+				graphics2D.setColor(config.currentFillColor());
+				graphics2D.fill(s);
+			});
 	}
 
 	private void renderObstacles(final Graphics2D graphics2D)
 	{
-		final var gameObjects = plugin.getObstacles();
+		final Function<TileObject, Shape> func = config.obstaclesOverlay() == OutlineStyle.CLICKBOX ?
+			TileObject::getClickbox : TileObject::getCanvasTilePoly;
 
-		if (gameObjects.isEmpty())
-		{
-			return;
-		}
+		plugin.getObstacles().stream()
+			.map(func)
+			.filter(Objects::nonNull)
+			.forEach(s -> {
+				graphics2D.setStroke(STROKE);
+				graphics2D.setColor(config.obstaclesOutlineColor());
+				graphics2D.draw(s);
 
-		for (final var gameObject : gameObjects)
-		{
-			final Shape shape = gameObject.getClickbox();
-
-			if (shape == null)
-			{
-				continue;
-			}
-
-			graphics2D.setStroke(STROKE);
-			graphics2D.setColor(config.obstaclesOutlineColor());
-			graphics2D.draw(shape);
-
-			graphics2D.setColor(config.obstaclesFillColor());
-			graphics2D.fill(shape);
-		}
-	}
-
-	private void renderCurrents(final Graphics2D graphics2D)
-	{
-		final var gameObjects = plugin.getCurrents();
-
-		if (gameObjects.isEmpty())
-		{
-			return;
-		}
-
-		for (final var gameObject : gameObjects)
-		{
-			final Polygon polygon = gameObject.getCanvasTilePoly();
-
-			if (polygon == null)
-			{
-				continue;
-			}
-
-			graphics2D.setStroke(STROKE);
-			graphics2D.setColor(config.currentOutlineColor());
-			graphics2D.draw(polygon);
-
-			graphics2D.setColor(config.currentFillColor());
-			graphics2D.fill(polygon);
-		}
+				graphics2D.setColor(config.obstaclesFillColor());
+				graphics2D.fill(s);
+			});
 	}
 
 	private void renderBubbles(final Graphics2D graphics2D)
 	{
-		final var gameObjects = plugin.getBubbles();
+		plugin.getBubbles().stream()
+			.map(TileObject::getCanvasTilePoly)
+			.filter(Objects::nonNull)
+			.forEach(s -> {
+				graphics2D.setStroke(STROKE);
+				graphics2D.setColor(config.bubbleOutlineColor());
+				graphics2D.draw(s);
 
-		if (gameObjects.isEmpty())
-		{
-			return;
-		}
+				graphics2D.setColor(config.bubbleFillColor());
+				graphics2D.fill(s);
+			});
+	}
 
-		for (final var gameObject : gameObjects)
-		{
-			final Polygon polygon = gameObject.getCanvasTilePoly();
+	private void renderHoles(final Graphics2D graphics2D)
+	{
+		plugin.getHoles().stream()
+			.map(TileObject::getClickbox)
+			.filter(Objects::nonNull)
+			.forEach(s -> {
+				graphics2D.setStroke(STROKE);
+				graphics2D.setColor(config.holeOutlineColor());
+				graphics2D.draw(s);
 
-			if (polygon == null)
-			{
-				continue;
-			}
-
-			graphics2D.setStroke(STROKE);
-			graphics2D.setColor(config.bubbleOutlineColor());
-			graphics2D.draw(polygon);
-
-			graphics2D.setColor(config.bubbleFillColor());
-			graphics2D.fill(polygon);
-		}
+				graphics2D.setColor(config.holeFillColor());
+				graphics2D.fill(s);
+			});
 	}
 
 	private void renderPufferFish(final Graphics2D graphics2D)
 	{
-		final var npcs = plugin.getPufferFish();
+		final var pufferFish = plugin.getPufferFish();
 
-		if (npcs.isEmpty())
+		if (pufferFish.isEmpty())
 		{
 			return;
 		}
 
-		for (final NPC npc : npcs)
+		for (final var fish : pufferFish)
 		{
-			modelOutlineRenderer.drawOutline(npc, 2, config.pufferFishOutlineColor(), 4);
+			modelOutlineRenderer.drawOutline(fish, 2, config.pufferFishOutlineColor(), 4);
 
-			final Shape shape = npc.getConvexHull();
+			final Shape shape = fish.getConvexHull();
 
 			if (shape == null)
 			{
@@ -248,23 +244,24 @@ class UWAOverlay extends Overlay
 
 	private void renderChestsClams(final Graphics2D graphics2D)
 	{
-		final var gameObjects = plugin.getOpenChestClams();
+		final var chestClams = plugin.getChestClams();
 
-		if (gameObjects.isEmpty())
+		if (chestClams.isEmpty())
 		{
 			return;
 		}
 
-		for (final var gameObject : gameObjects)
+		for (final var chest : chestClams)
 		{
-			final Shape shape = gameObject.getClickbox();
+			modelOutlineRenderer.drawOutline(chest, 3, config.chestClamOutlineColor(), 4);
+
+			final Shape shape = chest.getClickbox();
 
 			if (shape == null)
 			{
 				continue;
 			}
 
-			modelOutlineRenderer.drawOutline(gameObject, 3, config.chestClamOutlineColor(), 4);
 			graphics2D.setColor(config.chestClamFillColor());
 			graphics2D.fill(shape);
 		}

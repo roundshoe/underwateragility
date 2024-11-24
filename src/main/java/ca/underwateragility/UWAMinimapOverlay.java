@@ -26,60 +26,86 @@
 
 package ca.underwateragility;
 
-import ca.underwateragility.tools.WorldLines;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics2D;
-import java.util.List;
+import java.util.Collection;
+import java.util.Objects;
 import javax.inject.Inject;
 import javax.inject.Singleton;
-import net.runelite.api.Client;
-import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.Actor;
+import net.runelite.api.NPC;
+import net.runelite.api.TileObject;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
+import net.runelite.client.ui.overlay.OverlayUtil;
 
 @Singleton
-class UWALinesOverlay extends Overlay
+class UWAMinimapOverlay extends Overlay
 {
-	private static final List<List<WorldPoint>> HOLE_WORLD_POINTS = List.of(
-		List.of(new WorldPoint(3772, 10267, 1), new WorldPoint(3823, 10247, 1)),
-		List.of(new WorldPoint(3772, 10280, 1), new WorldPoint(3816, 10271, 1)),
-		List.of(new WorldPoint(3789, 10298, 1), new WorldPoint(3833, 10289, 1)),
-		List.of(new WorldPoint(3754, 10241, 1), new WorldPoint(3779, 10241, 1)),
-		List.of(new WorldPoint(3779, 10277, 1), new WorldPoint(3716, 10243, 1))
-	);
-
-	private final Client client;
 	private final UWAPlugin plugin;
 	private final UWAConfig config;
 
 	@Inject
-	UWALinesOverlay(
-		final Client client,
-		final UWAPlugin plugin,
-		final UWAConfig config)
+	UWAMinimapOverlay(final UWAPlugin plugin, final UWAConfig config)
 	{
-		this.client = client;
+		super(plugin);
 		this.plugin = plugin;
 		this.config = config;
 
 		setPosition(OverlayPosition.DYNAMIC);
-		setLayer(OverlayLayer.ALWAYS_ON_TOP);
-		setPriority(Overlay.PRIORITY_LOW);
+		setLayer(OverlayLayer.ABOVE_WIDGETS);
+		setPriority(Overlay.PRIORITY_HIGH);
 	}
 
 	@Override
 	public Dimension render(final Graphics2D graphics2D)
 	{
-		if (config.holeLines() && (!config.holeLinesPressKey() || plugin.isKeyPressed()))
+		var style = config.bubbleOverlay();
+
+		if (style == UWAConfig.OverlayStyle.MINIMAP || style == UWAConfig.OverlayStyle.BOTH)
 		{
-			for (final var points : HOLE_WORLD_POINTS)
-			{
-				WorldLines.drawLinesOnWorld(graphics2D, client, points, Color.CYAN);
-			}
+			renderMinimapTileObject(graphics2D, plugin.getBubbles(), config.bubbleOutlineColor());
+		}
+
+		style = config.holeOverlay();
+
+		if (style == UWAConfig.OverlayStyle.MINIMAP || style == UWAConfig.OverlayStyle.BOTH)
+		{
+			renderMinimapTileObject(graphics2D, plugin.getHoles(), config.holeOutlineColor());
+		}
+
+		style = config.chestClamOverlay();
+
+		if (style == UWAConfig.OverlayStyle.MINIMAP || style == UWAConfig.OverlayStyle.BOTH)
+		{
+			renderMinimapTileObject(graphics2D, plugin.getChestClams(), config.chestClamOutlineColor());
+		}
+
+		style = config.pufferFishOverlay();
+
+		if (style == UWAConfig.OverlayStyle.MINIMAP || style == UWAConfig.OverlayStyle.BOTH)
+		{
+			renderMinimapActor(graphics2D, plugin.getPufferFish(), config.pufferFishOutlineColor());
 		}
 
 		return null;
+	}
+
+	private void renderMinimapTileObject(final Graphics2D graphics2D, final Collection<TileObject> tileObjects, final Color color)
+	{
+		tileObjects.stream()
+			.map(TileObject::getMinimapLocation)
+			.filter(Objects::nonNull)
+			.forEach(p -> OverlayUtil.renderMinimapLocation(graphics2D, p, color));
+	}
+
+	private void renderMinimapActor(final Graphics2D graphics2D, final Collection<NPC> npcs, final Color color)
+	{
+		npcs.stream()
+			.map(Actor::getMinimapLocation)
+			.filter(Objects::nonNull)
+			.forEach(p -> OverlayUtil.renderMinimapLocation(graphics2D, p, color));
 	}
 }

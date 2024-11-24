@@ -31,6 +31,7 @@ import java.awt.event.KeyEvent;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import javax.annotation.Nullable;
@@ -43,11 +44,13 @@ import net.runelite.api.GameObject;
 import net.runelite.api.GameState;
 import net.runelite.api.GroundObject;
 import net.runelite.api.HintArrowType;
+import net.runelite.api.ItemID;
 import net.runelite.api.NPC;
 import net.runelite.api.NpcID;
 import net.runelite.api.NullObjectID;
 import net.runelite.api.ObjectID;
 import net.runelite.api.Renderable;
+import net.runelite.api.TileObject;
 import net.runelite.api.Varbits;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameObjectDespawned;
@@ -86,32 +89,50 @@ public class UWAPlugin extends Plugin implements KeyListener
 	private static final Set<Integer> REGION_IDS = Set.of(15008, 15264);
 
 	private static final Set<Integer> GAME_OBJECT_IDS_IGNORE = Set.of(
-		16984, 30740, 30744, 30759, 30760, 30761, 30783, 30784, 30785, 30787, 30948,
-		30957, 30959, 30962, 30963, 30964, 30965, 30966, 30969, 30970, 30971, 30972
+		16984, 30500, 30501, 30734, 30735, 30738, 30740, 30741, 30742, 30743,
+		30744, 30759, 30760, 30761, 30762, 30783, 30784, 30785, 30787, 30947,
+		30948, 30957, 30958, 30959, 30962, 30963, 30964, 30965, 30966, 30969,
+		30970, 30971, 30972, 30987, 31433, 31434, 31435, 31843
 	);
-	private static final Set<Integer> GROUND_OBJECT_IDS_IGNORE = Set.of(7517);
+	private static final Set<Integer> GROUND_OBJECT_IDS_IGNORE = Collections.singleton(7517);
 	private static final Set<Integer> NPC_IDS_IGNORE = Set.of(7757, 7758, 7782, 7783, 7784, 7796, 8667);
+
+	private static final Set<WorldPoint> WORLD_POINTS_BUBBLE_CHESTS = Set.of(
+		new WorldPoint(3742, 10242, 1), new WorldPoint(3744, 10242, 1),
+		new WorldPoint(3751, 10267, 1), new WorldPoint(3752, 10269, 1),
+		new WorldPoint(3753, 10266, 1), new WorldPoint(3760, 10259, 1),
+		new WorldPoint(3766, 10264, 1), new WorldPoint(3777, 10279, 1),
+		new WorldPoint(3779, 10274, 1), new WorldPoint(3782, 10254, 1),
+		new WorldPoint(3782, 10256, 1), new WorldPoint(3785, 10266, 1),
+		new WorldPoint(3787, 10254, 1), new WorldPoint(3791, 10255, 1),
+		new WorldPoint(3804, 10265, 1), new WorldPoint(3811, 10261, 1),
+		new WorldPoint(3813, 10249, 1), new WorldPoint(3815, 10285, 1),
+		new WorldPoint(3817, 20184, 1), new WorldPoint(3821, 10248, 1),
+		new WorldPoint(3833, 10243, 1));
 
 	private static final int SCRIPT_ID_OXYGEN = 1997;
 	private static final int WIDGET_GROUP_ID_WATER1 = 169;
 	private static final int WIDGET_GROUP_ID_WATER2 = 170;
 	private static final int WIDGET_GROUP_ID_OXYGEN = 609;
 	private static final int WATER_WIDGET_DEFAULT_OPACITY = 140;
+	private static final int TICK_COUNT_CHEST = 100;
 
 	private final Hooks.RenderableDrawListener drawListener = this::shouldDraw;
 
 	@Getter(AccessLevel.PACKAGE)
-	private final List<GameObject> bubbles = new ArrayList<>();
+	private final List<TileObject> bubbles = new ArrayList<>();
 	@Getter(AccessLevel.PACKAGE)
-	private final List<GameObject> openChestClams = new ArrayList<>();
+	private final List<TileObject> chestClams = new ArrayList<>();
 	@Getter(AccessLevel.PACKAGE)
-	private final List<GameObject> obstacles = new ArrayList<>();
+	private final List<TileObject> obstacles = new ArrayList<>();
 	@Getter(AccessLevel.PACKAGE)
 	private final List<GameObject> currents = new ArrayList<>();
 	@Getter(AccessLevel.PACKAGE)
-	private final List<GameObject> holes = new ArrayList<>();
+	private final List<TileObject> holes = new ArrayList<>();
 	@Getter(AccessLevel.PACKAGE)
 	private final List<NPC> pufferFish = new ArrayList<>();
+	@Getter(AccessLevel.PACKAGE)
+	private final List<WorldPoint> chestClamLines = new ArrayList<>();
 
 	@Inject
 	private Client client;
@@ -130,22 +151,31 @@ public class UWAPlugin extends Plugin implements KeyListener
 	@Inject
 	private OverlayManager overlayManager;
 	@Inject
-	private UWAOverlay uwaOverlay;
+	private UWASceneOverlay uwaSceneOverlay;
 	@Inject
-	private UWALinesOverlay uwaLinesOverlay;
+	private UWAMinimapOverlay uwaMinimapOverlay;
+	@Inject
+	private UWAInformationOverlayPanel uwaInformationOverlayPanel;
 	@Inject
 	private GameEventManager gameEventManager;
 
 	@Nullable
-	private WorldPoint hintArrowPoint;
+	@Getter(AccessLevel.PACKAGE)
+	private WorldPoint targetWorldPoint;
 	@Nullable
 	private Timer timer;
 
+	@Getter(AccessLevel.PACKAGE)
+	private int distanceToTarget = -1;
+	@Getter(AccessLevel.PACKAGE)
+	private int ticksRemaining = -1;
 	@Getter(AccessLevel.PACKAGE)
 	private int oxygen;
 	@Getter(AccessLevel.PACKAGE)
 	private int oxygenTicks;
 
+	@Getter(AccessLevel.PACKAGE)
+	private boolean bubbleAdjacent;
 	@Getter(AccessLevel.PACKAGE)
 	private boolean keyPressed;
 	private boolean enabled;
@@ -170,14 +200,17 @@ public class UWAPlugin extends Plugin implements KeyListener
 	private void init()
 	{
 		enabled = true;
+
 		hooks.registerRenderableDrawListener(drawListener);
 		keyManager.registerKeyListener(this);
-		overlayManager.add(uwaOverlay);
-		overlayManager.add(uwaLinesOverlay);
-		updateOxygen();
+
+		overlayManager.add(uwaSceneOverlay);
+		overlayManager.add(uwaMinimapOverlay);
+		overlayManager.add(uwaInformationOverlayPanel);
+
 		hideOxygenWidget(config.hideOxygenWidget());
 		hideWaterWidget(config.hideWaterWidget());
-		updateHintArrowPoint();
+
 		gameEventManager.simulateGameEvents(this);
 	}
 
@@ -185,25 +218,40 @@ public class UWAPlugin extends Plugin implements KeyListener
 	public void shutDown()
 	{
 		enabled = false;
+
 		hooks.unregisterRenderableDrawListener(drawListener);
 		keyManager.unregisterKeyListener(this);
-		overlayManager.remove(uwaOverlay);
-		overlayManager.remove(uwaLinesOverlay);
-		keyPressed = false;
-		clearGameObjects();
+
+		overlayManager.remove(uwaSceneOverlay);
+		overlayManager.remove(uwaMinimapOverlay);
+		overlayManager.remove(uwaInformationOverlayPanel);
+
+		clearObjects();
 		pufferFish.clear();
-		removeTimer();
+		chestClamLines.clear();
+
+		targetWorldPoint = null;
+
+		bubbleAdjacent = false;
+		keyPressed = false;
+
+		distanceToTarget = -1;
+		ticksRemaining = -1;
 		oxygen = 0;
 		oxygenTicks = 0;
+
+		removeTimer();
+
 		hideOxygenWidget(false);
 		hideWaterWidget(false);
+
 		setGameStateLoading();
 	}
 
-	private void clearGameObjects()
+	private void clearObjects()
 	{
 		bubbles.clear();
-		openChestClams.clear();
+		chestClams.clear();
 		obstacles.clear();
 		currents.clear();
 		holes.clear();
@@ -225,20 +273,10 @@ public class UWAPlugin extends Plugin implements KeyListener
 				setGameStateLoading();
 				break;
 			case UWAConfig.CONFIG_KEY_HIDE_WATER_WIDGET:
-				clientThread.invokeLater(() -> {
-					if (client.getGameState() == GameState.LOGGED_IN)
-					{
-						hideWaterWidget(config.hideWaterWidget());
-					}
-				});
+				hideWaterWidget(config.hideWaterWidget());
 				break;
 			case UWAConfig.CONFIG_KEY_HIDE_OXYGEN_WIDGET:
-				clientThread.invokeLater(() -> {
-					if (client.getGameState() == GameState.LOGGED_IN)
-					{
-						hideOxygenWidget(config.hideOxygenWidget());
-					}
-				});
+				hideOxygenWidget(config.hideOxygenWidget());
 				break;
 			case UWAConfig.CONFIG_KEY_CHEST_CLAM_TIMER:
 				removeTimer();
@@ -274,7 +312,7 @@ public class UWAPlugin extends Plugin implements KeyListener
 			case LOADING:
 				if (enabled)
 				{
-					clearGameObjects();
+					clearObjects();
 				}
 				break;
 			case LOGIN_SCREEN:
@@ -297,7 +335,14 @@ public class UWAPlugin extends Plugin implements KeyListener
 			--oxygenTicks;
 		}
 
-		updateHintArrowPoint();
+		if (ticksRemaining >= 0)
+		{
+			--ticksRemaining;
+		}
+
+		updateTargetWorldPoint();
+		updateDistanceToTarget();
+		updateChestClamLines();
 	}
 
 	@Subscribe
@@ -347,7 +392,7 @@ public class UWAPlugin extends Plugin implements KeyListener
 		{
 			case ObjectID.CLAM_30969:
 			case ObjectID.CHEST_30971:
-				openChestClams.add(gameObject);
+				chestClams.add(gameObject);
 				break;
 			case ObjectID.TUNNEL_30959:
 			case ObjectID.OBSTACLE_30962:
@@ -388,7 +433,7 @@ public class UWAPlugin extends Plugin implements KeyListener
 		{
 			case ObjectID.CLAM_30969:
 			case ObjectID.CHEST_30971:
-				openChestClams.remove(gameObject);
+				chestClams.remove(gameObject);
 				break;
 			case ObjectID.TUNNEL_30959:
 			case ObjectID.OBSTACLE_30962:
@@ -512,10 +557,11 @@ public class UWAPlugin extends Plugin implements KeyListener
 		}
 	}
 
-	private void updateHintArrowPoint()
+	private void updateTargetWorldPoint()
 	{
-		if (!config.chestClamTimer() || client.getHintArrowType() != HintArrowType.COORDINATE)
+		if (client.getHintArrowType() != HintArrowType.COORDINATE)
 		{
+			targetWorldPoint = null;
 			return;
 		}
 
@@ -523,26 +569,78 @@ public class UWAPlugin extends Plugin implements KeyListener
 
 		if (worldPoint == null)
 		{
-			removeTimer();
+			targetWorldPoint = null;
 			return;
 		}
 
-		if (worldPoint.equals(hintArrowPoint))
+		if (worldPoint.equals(targetWorldPoint))
 		{
 			return;
 		}
 
-		removeTimer();
-		timer = new Timer(60, ChronoUnit.SECONDS, itemManager.getImage(21656), this);
-		infoBoxManager.addInfoBox(timer);
-		hintArrowPoint = worldPoint;
+		targetWorldPoint = worldPoint;
+
+		updateTimer();
+		updateTicksRemaining();
+		updateBubbleAdjacent(worldPoint);
+	}
+
+	private void updateDistanceToTarget()
+	{
+		if (targetWorldPoint != null)
+		{
+			distanceToTarget = client.getLocalPlayer().getWorldLocation().distanceTo2D(targetWorldPoint);
+		}
 	}
 
 	private void removeTimer()
 	{
 		infoBoxManager.removeInfoBox(timer);
 		timer = null;
-		hintArrowPoint = null;
+	}
+
+	private void updateTimer()
+	{
+		removeTimer();
+
+		if (config.chestClamTimer())
+		{
+			timer = new Timer((long) (TICK_COUNT_CHEST * 0.6), ChronoUnit.SECONDS, itemManager.getImage(ItemID.MERMAIDS_TEAR, 3, false), this);
+			timer.setTooltip("Underwater Agility");
+			infoBoxManager.addInfoBox(timer);
+		}
+	}
+
+	private void updateTicksRemaining()
+	{
+		ticksRemaining = TICK_COUNT_CHEST;
+	}
+
+	private void updateBubbleAdjacent(final WorldPoint target)
+	{
+		for (final var wp : WORLD_POINTS_BUBBLE_CHESTS)
+		{
+			if (wp.getX() == target.getX() && wp.getY() == target.getY())
+			{
+				bubbleAdjacent = true;
+				return;
+			}
+		}
+
+		bubbleAdjacent = false;
+	}
+
+	private void updateChestClamLines()
+	{
+		chestClamLines.clear();
+
+		if (targetWorldPoint == null)
+		{
+			return;
+		}
+
+		chestClamLines.add(client.getLocalPlayer().getWorldLocation());
+		chestClamLines.add(new WorldPoint(targetWorldPoint.getX(), targetWorldPoint.getY(), 1));
 	}
 
 	private boolean shouldDraw(final Renderable renderable, final boolean drawingUI)
@@ -569,7 +667,7 @@ public class UWAPlugin extends Plugin implements KeyListener
 	@Override
 	public void keyPressed(final KeyEvent e)
 	{
-		if (enabled && config.holeLinesKey().matches(e))
+		if (enabled && config.linesKey().matches(e))
 		{
 			keyPressed = true;
 		}
@@ -578,7 +676,7 @@ public class UWAPlugin extends Plugin implements KeyListener
 	@Override
 	public void keyReleased(final KeyEvent e)
 	{
-		if (enabled && config.holeLinesKey().matches(e))
+		if (enabled && config.linesKey().matches(e))
 		{
 			keyPressed = false;
 		}
