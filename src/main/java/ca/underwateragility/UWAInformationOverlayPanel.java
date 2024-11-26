@@ -29,9 +29,13 @@ package ca.underwateragility;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics2D;
+import java.time.Duration;
+import java.time.Instant;
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import net.runelite.api.MenuAction;
 import net.runelite.client.ui.overlay.Overlay;
+import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.ui.overlay.OverlayPanel;
 import net.runelite.client.ui.overlay.OverlayPosition;
 import net.runelite.client.ui.overlay.components.LineComponent;
@@ -52,6 +56,11 @@ class UWAInformationOverlayPanel extends OverlayPanel
 
 		setPosition(OverlayPosition.BOTTOM_RIGHT);
 		setPriority(Overlay.PRIORITY_HIGH);
+
+		final String target = "Information Panel";
+
+		addMenuEntry(MenuAction.RUNELITE_OVERLAY_CONFIG, OverlayManager.OPTION_CONFIGURE, target);
+		addMenuEntry(MenuAction.RUNELITE_OVERLAY, "Reset Tears", target, m -> plugin.resetTears());
 	}
 
 	@Override
@@ -67,34 +76,100 @@ class UWAInformationOverlayPanel extends OverlayPanel
 			.color(Color.CYAN)
 			.build());
 
-		final int ticksRemaining = plugin.getTicksRemaining();
+		if (config.infoPanelTicks())
+		{
+			final int ticksRemaining = plugin.getTicksRemaining();
 
-		panelComponent.getChildren().add(LineComponent.builder()
-			.left("Ticks:")
-			.right(ticksRemaining >= 0 ? Integer.toString(ticksRemaining) : "?")
-			.build());
+			panelComponent.getChildren().add(LineComponent.builder()
+				.left("Ticks:")
+				.right(ticksRemaining >= 0 ? Integer.toString(ticksRemaining) : "?")
+				.build());
+		}
 
-		final int distance = plugin.getDistanceToTarget();
+		if (config.infoPanelDistance())
+		{
+			final int distance = plugin.getDistanceToTarget();
 
-		panelComponent.getChildren().add(LineComponent.builder()
-			.left("Distance:")
-			.right(distance >= 0 ? Integer.toString(distance) : "?")
-			.build());
+			panelComponent.getChildren().add(LineComponent.builder()
+				.left("Distance:")
+				.right(distance >= 0 ? Integer.toString(distance) : "?")
+				.build());
+		}
 
-		final boolean adjacent = plugin.isBubbleAdjacent();
+		if (config.infoPanelOxygen())
+		{
+			final int oxygenTicks = plugin.getOxygenTicks();
 
-		final int oxygenTicks = plugin.getOxygenTicks();
+			panelComponent.getChildren().add(LineComponent.builder()
+				.left("Oxygen:")
+				.right(Integer.toString(oxygenTicks))
+				.build());
+		}
 
-		panelComponent.getChildren().add(LineComponent.builder()
-			.left("Oxygen:")
-			.right(Integer.toString(oxygenTicks))
-			.build());
+		if (config.infoPanelTearsPerHour() || config.infoPanelElapsed())
+		{
+			final int count = plugin.getThieveSuccessCount();
+			final var startTime = plugin.getStartTime();
+			Duration elapsed = null;
 
-		panelComponent.getChildren().add(LineComponent.builder()
-			.left("Bubble:")
-			.right(adjacent ? "Yes" : "No")
-			.rightColor(adjacent ? Color.GREEN : Color.RED)
-			.build());
+			if (startTime != null)
+			{
+				elapsed = Duration.between(plugin.getStartTime(), Instant.now());
+			}
+
+			if (config.infoPanelTearsPerHour())
+			{
+				final String tearsPerHour;
+
+				if (count > 0 && elapsed != null)
+				{
+					final double hours = elapsed.toMillis() / (1000D * 60 * 60);
+					tearsPerHour = String.format("%.0f / hr", count / hours);
+				}
+				else
+				{
+					tearsPerHour = "?";
+				}
+
+				panelComponent.getChildren().add(LineComponent.builder()
+					.left("Tears:")
+					.right(tearsPerHour)
+					.build());
+			}
+
+			if (config.infoPanelElapsed())
+			{
+				final String time;
+
+				if (elapsed != null)
+				{
+					final var totalSeconds = elapsed.getSeconds();
+					final var minutes = totalSeconds / 60;
+					final var seconds = totalSeconds % 60;
+					time = String.format("%02d:%02d", minutes, seconds);
+				}
+				else
+				{
+					time = "?";
+				}
+
+				panelComponent.getChildren().add(LineComponent.builder()
+					.left("Elapsed:")
+					.right(time)
+					.build());
+			}
+		}
+
+		if (config.infoPanelBubble())
+		{
+			final boolean nearby = plugin.isBubbleNearby();
+
+			panelComponent.getChildren().add(LineComponent.builder()
+				.left("Bubble:")
+				.right(nearby ? "Yes" : "No")
+				.rightColor(nearby ? Color.GREEN : Color.RED)
+				.build());
+		}
 
 //		final var wp = plugin.getTargetWorldPoint();
 //

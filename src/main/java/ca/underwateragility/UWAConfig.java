@@ -54,9 +54,16 @@ public interface UWAConfig extends Config
 	String SECTION_GENERAL = "generalSection";
 
 	@ConfigSection(
+		name = "Information Panel",
+		description = "Information panel configuration.",
+		position = 1
+	)
+	String SECTION_INFORMATION_PANEL = "informationPanelSection";
+
+	@ConfigSection(
 		name = "Color",
 		description = "Color configuration.",
-		position = 1
+		position = 2
 	)
 	String SECTION_COLOR = "colorSection";
 
@@ -209,25 +216,13 @@ public interface UWAConfig extends Config
 	}
 
 	@ConfigItem(
-		name = "Information Panel Overlay",
-		description = "Display an information panel overlay.",
-		position = 12,
-		keyName = "informationPanelOverlay",
-		section = SECTION_GENERAL
-	)
-	default boolean informationPanelOverlay()
-	{
-		return false;
-	}
-
-	@ConfigItem(
 		name = "Replace Swim Animation",
 		description = "Replaces the swim animation with walking.",
-		position = 13,
-		keyName = "replaceSwimAniamtion",
+		position = 12,
+		keyName = "replaceSwimAnimation",
 		section = SECTION_GENERAL
 	)
-	default boolean replaceSwimAniamtion()
+	default boolean replaceSwimAnimation()
 	{
 		return false;
 	}
@@ -237,7 +232,7 @@ public interface UWAConfig extends Config
 	@ConfigItem(
 		name = "Hide Oxygen Widget",
 		description = "Hide the oxygen widget.",
-		position = 14,
+		position = 13,
 		keyName = CONFIG_KEY_HIDE_OXYGEN_WIDGET,
 		section = SECTION_GENERAL
 	)
@@ -251,7 +246,7 @@ public interface UWAConfig extends Config
 	@ConfigItem(
 		name = "Hide Water Widget",
 		description = "Hide the water widget.",
-		position = 15,
+		position = 14,
 		keyName = CONFIG_KEY_HIDE_WATER_WIDGET,
 		section = SECTION_GENERAL
 	)
@@ -265,13 +260,101 @@ public interface UWAConfig extends Config
 	@ConfigItem(
 		name = "Hide Scenery",
 		description = "Hide scenery.",
-		position = 16,
+		position = 15,
 		keyName = CONFIG_KEY_HIDE_SCENERY,
 		section = SECTION_GENERAL
 	)
 	default boolean hideScenery()
 	{
 		return false;
+	}
+
+	// Information Panel
+
+	@ConfigItem(
+		name = "Information Panel Overlay",
+		description = "Display an information panel overlay.",
+		position = 0,
+		keyName = "informationPanelOverlay",
+		section = SECTION_INFORMATION_PANEL
+	)
+	default boolean informationPanelOverlay()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		name = "Ticks Until Switch",
+		description = "Show ticks remaining until next chest/clam switch.",
+		position = 1,
+		keyName = "infoPanelTicks",
+		section = SECTION_INFORMATION_PANEL
+	)
+	default boolean infoPanelTicks()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		name = "Distance From Chest",
+		description = "Show distance between player's tile and active chest/clam.",
+		position = 2,
+		keyName = "infoPanelDistance",
+		section = SECTION_INFORMATION_PANEL
+	)
+	default boolean infoPanelDistance()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		name = "Oxygen Ticks",
+		description = "Show oxygen ticks remaining.",
+		position = 3,
+		keyName = "infoPanelOxygen",
+		section = SECTION_INFORMATION_PANEL
+	)
+	default boolean infoPanelOxygen()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		name = "Tears Per Hour",
+		description = "Show number of successful thieves per hour." +
+			"<br>Right-click panel to reset.",
+		position = 4,
+		keyName = "infoPanelTearsPerHour",
+		section = SECTION_INFORMATION_PANEL
+	)
+	default boolean infoPanelTearsPerHour()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		name = "Elapsed",
+		description = "Show time elapsed." +
+			"<br>Right-click panel to reset.",
+		position = 5,
+		keyName = "infoPanelElapsed",
+		section = SECTION_INFORMATION_PANEL
+	)
+	default boolean infoPanelElapsed()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		name = "Bubbles Nearby",
+		description = "Show if there is a bubble nearby the active chest.",
+		position = 6,
+		keyName = "infoPanelBubble",
+		section = SECTION_INFORMATION_PANEL
+	)
+	default boolean infoPanelBubble()
+	{
+		return true;
 	}
 
 	// Color

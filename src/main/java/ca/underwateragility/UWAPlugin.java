@@ -28,6 +28,7 @@ package ca.underwateragility;
 
 import com.google.inject.Provides;
 import java.awt.event.KeyEvent;
+import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -39,6 +40,7 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.AccessLevel;
 import lombok.Getter;
+import net.runelite.api.Actor;
 import net.runelite.api.Client;
 import net.runelite.api.GameObject;
 import net.runelite.api.GameState;
@@ -53,6 +55,7 @@ import net.runelite.api.Renderable;
 import net.runelite.api.TileObject;
 import net.runelite.api.Varbits;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.events.AnimationChanged;
 import net.runelite.api.events.GameObjectDespawned;
 import net.runelite.api.events.GameObjectSpawned;
 import net.runelite.api.events.GameStateChanged;
@@ -106,9 +109,10 @@ public class UWAPlugin extends Plugin implements KeyListener
 		new WorldPoint(3782, 10256, 1), new WorldPoint(3785, 10266, 1),
 		new WorldPoint(3787, 10254, 1), new WorldPoint(3791, 10255, 1),
 		new WorldPoint(3804, 10265, 1), new WorldPoint(3811, 10261, 1),
-		new WorldPoint(3813, 10249, 1), new WorldPoint(3815, 10285, 1),
-		new WorldPoint(3817, 20184, 1), new WorldPoint(3821, 10248, 1),
-		new WorldPoint(3833, 10243, 1));
+		new WorldPoint(3813, 10249, 1), new WorldPoint(3814, 10270, 1),
+		new WorldPoint(3815, 10285, 1), new WorldPoint(3816, 10267, 1),
+		new WorldPoint(3817, 10284, 1), new WorldPoint(3818, 10270, 1),
+		new WorldPoint(3821, 10248, 1), new WorldPoint(3833, 10243, 1));
 
 	private static final int SCRIPT_ID_OXYGEN = 1997;
 	private static final int WIDGET_GROUP_ID_WATER1 = 169;
@@ -116,6 +120,8 @@ public class UWAPlugin extends Plugin implements KeyListener
 	private static final int WIDGET_GROUP_ID_OXYGEN = 609;
 	private static final int WATER_WIDGET_DEFAULT_OPACITY = 140;
 	private static final int TICK_COUNT_CHEST = 100;
+	private static final int ANIMATION_ID_THIEVE_SUCCESS = 7709;
+	private static final int ANIMATION_ID_THIEVE_FAIL = 7710;
 
 	private final Hooks.RenderableDrawListener drawListener = this::shouldDraw;
 
@@ -165,6 +171,14 @@ public class UWAPlugin extends Plugin implements KeyListener
 	@Nullable
 	private Timer timer;
 
+	@Nullable
+	@Getter(AccessLevel.PACKAGE)
+	private Instant startTime;
+
+	@Getter(AccessLevel.PACKAGE)
+	private int thieveSuccessCount;
+	@Getter(AccessLevel.PACKAGE)
+	private int thieveFailCount;
 	@Getter(AccessLevel.PACKAGE)
 	private int distanceToTarget = -1;
 	@Getter(AccessLevel.PACKAGE)
@@ -175,7 +189,7 @@ public class UWAPlugin extends Plugin implements KeyListener
 	private int oxygenTicks;
 
 	@Getter(AccessLevel.PACKAGE)
-	private boolean bubbleAdjacent;
+	private boolean bubbleNearby;
 	@Getter(AccessLevel.PACKAGE)
 	private boolean keyPressed;
 	private boolean enabled;
@@ -232,8 +246,10 @@ public class UWAPlugin extends Plugin implements KeyListener
 
 		targetWorldPoint = null;
 
-		bubbleAdjacent = false;
+		bubbleNearby = false;
 		keyPressed = false;
+
+		resetTears();
 
 		distanceToTarget = -1;
 		ticksRemaining = -1;
@@ -347,6 +363,36 @@ public class UWAPlugin extends Plugin implements KeyListener
 	}
 
 	@Subscribe
+	public void onAnimationChanged(final AnimationChanged event)
+	{
+		if (!enabled)
+		{
+			return;
+		}
+
+		final Actor actor = event.getActor();
+
+		if (actor != client.getLocalPlayer())
+		{
+			return;
+		}
+
+		final int id = actor.getAnimation();
+
+		if (id == ANIMATION_ID_THIEVE_SUCCESS)
+		{
+			if (thieveSuccessCount++ == 0)
+			{
+				startTime = Instant.now();
+			}
+		}
+		else if (id == ANIMATION_ID_THIEVE_FAIL)
+		{
+			++thieveFailCount;
+		}
+	}
+
+	@Subscribe
 	public void onNpcSpawned(final NpcSpawned event)
 	{
 		if (!enabled)
@@ -401,6 +447,10 @@ public class UWAPlugin extends Plugin implements KeyListener
 				obstacles.add(gameObject);
 				break;
 			case ObjectID.CURRENT:
+			case ObjectID.PLANT_30779:
+			case ObjectID.PLANT_30780:
+			case ObjectID.PLANT_30781:
+			case ObjectID.PLANT_30782:
 				currents.add(gameObject);
 				break;
 			case ObjectID.HOLE_30966:
@@ -442,6 +492,10 @@ public class UWAPlugin extends Plugin implements KeyListener
 				obstacles.remove(gameObject);
 				break;
 			case ObjectID.CURRENT:
+			case ObjectID.PLANT_30779:
+			case ObjectID.PLANT_30780:
+			case ObjectID.PLANT_30781:
+			case ObjectID.PLANT_30782:
 				currents.remove(gameObject);
 				break;
 			case ObjectID.HOLE_30966:
@@ -623,12 +677,12 @@ public class UWAPlugin extends Plugin implements KeyListener
 		{
 			if (wp.getX() == target.getX() && wp.getY() == target.getY())
 			{
-				bubbleAdjacent = true;
+				bubbleNearby = true;
 				return;
 			}
 		}
 
-		bubbleAdjacent = false;
+		bubbleNearby = false;
 	}
 
 	private void updateChestClamLines()
@@ -646,7 +700,7 @@ public class UWAPlugin extends Plugin implements KeyListener
 
 	private void updatePlayerAnimations()
 	{
-		if (!config.replaceSwimAniamtion())
+		if (!config.replaceSwimAnimation())
 		{
 			return;
 		}
@@ -664,6 +718,13 @@ public class UWAPlugin extends Plugin implements KeyListener
 			player.setWalkRotate180(820);
 			player.setRunAnimation(824);
 		}
+	}
+
+	void resetTears()
+	{
+		thieveSuccessCount = 0;
+		thieveFailCount = 0;
+		startTime = null;
 	}
 
 	private boolean shouldDraw(final Renderable renderable, final boolean drawingUI)
